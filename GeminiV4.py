@@ -1,14 +1,12 @@
-
 import streamlit as st
-import speech_recognition as sr
-from gtts import gTTS
-import google.generativeai as genai
 import os
 import tempfile
+import speech_recognition as sr
+import google.generativeai as genai
 from pydub import AudioSegment
 
 # Set the API key for Google Generative AI
-os.environ["API_KEY"] = 'YOUR_GOOGLE_API_KEY'
+os.environ["API_KEY"] = 'AIzaSyBGo6U2he1QpppItMKpSW2jzy5BI_mKRnE'
 
 # Configure the Google Generative AI model
 genai.configure(api_key=os.environ["API_KEY"])
@@ -26,7 +24,6 @@ def process_audio(audio_file):
             return "Sorry, my speech service is down."
 
 def process_text_with_llm(text):
-    """Generate a response using Google Generative AI based on input text."""
     model = genai.GenerativeModel('gemini-1.0-pro')
     text += '. Answer it to the point within 150 words in a conversational tone.'
     response = model.generate_content(text)
@@ -34,26 +31,89 @@ def process_text_with_llm(text):
 
 st.title("Real-Time Audio Processing with Streamlit")
 
-# Serving the HTML file within Streamlit
-with open("continuous_audio_capture.html", "r") as html_file:
-    html_content = html_file.read()
+# Serve the HTML page within the Streamlit app
+st.components.v1.html(
+    """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Continuous Real-Time Audio Capture</title>
+    </head>
+    <body>
+        <h1>Continuous Real-Time Audio Capture and Streamlit Integration</h1>
+        <button onclick="startListening()">Start Conversation</button>
+        <button onclick="stopListening()">Stop Conversation</button>
+        <div id="response"></div>
 
-st.components.v1.html(html_content, height=600)
+        <script>
+            let mediaRecorder;
+            let audioChunks = [];
+            let isListening = false;
+
+            async function startListening() {
+                isListening = true;
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                    if (mediaRecorder.state === 'inactive') {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        sendAudioToStreamlit(audioBlob);
+                        audioChunks = [];
+                    }
+                };
+
+                mediaRecorder.start();
+                setInterval(() => {
+                    if (mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                        if (isListening) {
+                            mediaRecorder.start();
+                        }
+                    }
+                }, 5000); // Adjust interval as needed
+            }
+
+            function stopListening() {
+                isListening = false;
+                mediaRecorder.stop();
+            }
+
+            function sendAudioToStreamlit(audioBlob) {
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'audio.wav');
+
+                fetch('/process-audio', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('response').innerText = 'Response: ' + data.response;
+                    if (isListening) {
+                        startListening();
+                    }
+                })
+                .catch(error => console.error('Error sending audio:', error));
+            }
+        </script>
+    </body>
+    </html>
+    """,
+    height=600,
+    scrolling=True
+)
 
 # Handle incoming POST request from JavaScript
-if st.request.method == 'POST':
-    audio_file = st.request.files.get('audio')
+if st.experimental_get_query_params().get('method') == ['POST']:
+    audio_file = st.file_uploader("Upload an audio file", type=["wav", "mp3"])
     if audio_file:
         with tempfile.NamedTemporaryFile(delete=False) as temp_audio:
             temp_audio.write(audio_file.read())
             temp_audio.flush()
 
-            # Process the audio to get the text
             recognized_text = process_audio(temp_audio.name)
-
-            # Process the text with LLM
             response_text = process_text_with_llm(recognized_text)
 
             st.json({"response": response_text})
-
-
