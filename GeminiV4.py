@@ -6,7 +6,7 @@ import google.generativeai as genai
 from pydub import AudioSegment
 
 # Set the API key for Google Generative AI
-os.environ["API_KEY"] = 'AIzaSyBGo6U2he1QpppItMKpSW2jzy5BI_mKRnE'
+os.environ["API_KEY"] = 'YOUR_GOOGLE_API_KEY'
 
 # Configure the Google Generative AI model
 genai.configure(api_key=os.environ["API_KEY"])
@@ -32,78 +32,75 @@ def process_text_with_llm(text):
 st.title("Real-Time Audio Processing with Streamlit")
 
 # Serve the HTML page within the Streamlit app
-st.components.v1.html(
-    """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Continuous Real-Time Audio Capture</title>
-    </head>
-    <body>
-        <h1>Continuous Real-Time Audio Capture and Streamlit Integration</h1>
-        <button onclick="startListening()">Start Conversation</button>
-        <button onclick="stopListening()">Stop Conversation</button>
-        <div id="response"></div>
+html_code = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Continuous Real-Time Audio Capture</title>
+</head>
+<body>
+    <h1>Continuous Real-Time Audio Capture and Streamlit Integration</h1>
+    <button onclick="startListening()">Start Conversation</button>
+    <button onclick="stopListening()">Stop Conversation</button>
+    <div id="response"></div>
 
-        <script>
-            let mediaRecorder;
-            let audioChunks = [];
-            let isListening = false;
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isListening = false;
 
-            async function startListening() {
-                isListening = true;
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
+        async function startListening() {
+            isListening = true;
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
 
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                    if (mediaRecorder.state === 'inactive') {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        sendAudioToStreamlit(audioBlob);
-                        audioChunks = [];
-                    }
-                };
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+                if (mediaRecorder.state === 'inactive') {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    sendAudioToStreamlit(audioBlob);
+                    audioChunks = [];
+                }
+            };
 
-                mediaRecorder.start();
-                setInterval(() => {
-                    if (mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
-                        if (isListening) {
-                            mediaRecorder.start();
-                        }
-                    }
-                }, 5000); // Adjust interval as needed
-            }
-
-            function stopListening() {
-                isListening = false;
-                mediaRecorder.stop();
-            }
-
-            function sendAudioToStreamlit(audioBlob) {
-                const formData = new FormData();
-                formData.append('audio', audioBlob, 'audio.wav');
-
-                fetch('/process-audio', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('response').innerText = 'Response: ' + data.response;
+            mediaRecorder.start();
+            setInterval(() => {
+                if (mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
                     if (isListening) {
-                        startListening();
+                        mediaRecorder.start();
                     }
-                })
-                .catch(error => console.error('Error sending audio:', error));
-            }
-        </script>
-    </body>
-    </html>
-    """,
-    height=600,
-    scrolling=True
-)
+                }
+            }, 5000); // Adjust interval as needed
+        }
+
+        function stopListening() {
+            isListening = false;
+            mediaRecorder.stop();
+        }
+
+        function sendAudioToStreamlit(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.wav');
+
+            fetch('/process-audio', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response').innerText = 'Response: ' + data.response;
+                if (isListening) {
+                    startListening();
+                }
+            })
+            .catch(error => console.error('Error sending audio:', error));
+        }
+    </script>
+</body>
+</html>
+"""
+st.components.v1.html(html_code, height=600)
 
 # Handle incoming POST request from JavaScript
 if st.experimental_get_query_params().get('method') == ['POST']:
@@ -117,3 +114,5 @@ if st.experimental_get_query_params().get('method') == ['POST']:
             response_text = process_text_with_llm(recognized_text)
 
             st.json({"response": response_text})
+
+
