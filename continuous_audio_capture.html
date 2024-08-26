@@ -1,0 +1,67 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Continuous Real-Time Audio Capture</title>
+</head>
+<body>
+    <h1>Continuous Real-Time Audio Capture and Streamlit Integration</h1>
+    <button onclick="startListening()">Start Conversation</button>
+    <button onclick="stopListening()">Stop Conversation</button>
+    <div id="response"></div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isListening = false;
+
+        async function startListening() {
+            isListening = true;
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+                if (mediaRecorder.state === 'inactive') {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    sendAudioToStreamlit(audioBlob);
+                    audioChunks = [];
+                }
+            };
+
+            mediaRecorder.start();
+            setInterval(() => {
+                if (mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    if (isListening) {
+                        mediaRecorder.start();
+                    }
+                }
+            }, 5000); // Adjust interval to match the expected input duration
+        }
+
+        function stopListening() {
+            isListening = false;
+            mediaRecorder.stop();
+        }
+
+        function sendAudioToStreamlit(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.wav');
+
+            fetch('http://localhost:8501/process-audio', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response').innerText = 'Response: ' + data.response;
+                if (isListening) {
+                    startListening();
+                }
+            })
+            .catch(error => console.error('Error sending audio:', error));
+        }
+    </script>
+</body>
+</html>
